@@ -1,0 +1,41 @@
+resource "local_file" "ingress-file" {
+  filename = "${path.module}/.kube/ingress.yaml"
+
+  sensitive_content = <<EOF
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ${var.app}
+  namespace: ${kubernetes_namespace.ns.metadata.0.name}
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: ${local.host_name}
+      http:
+        paths:
+          - path: /api
+            backend:
+              serviceName: ${kubernetes_service.service-api.metadata.0.name}
+              servicePort: 80
+          - path: /
+            backend:
+              serviceName: ${kubernetes_service.service-web.metadata.0.name}
+              servicePort: 80
+EOF
+}
+
+resource "null_resource" "ingress" {
+  # Changes to any instance of the cluster requires re-provisioning
+  triggers = {
+    name = "${local_file.ingress-file.filename}"
+  }
+
+  provisioner "local-exec" {
+    command = "kubectl apply -f ${path.module}/.kube/ingress.yaml --kubeconfig ${local_file.kubeconfig.filename}"
+  }
+}
+
+output "app-url" {
+  value = "https://${local.host_name}"
+}
